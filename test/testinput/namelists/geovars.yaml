@@ -322,3 +322,7 @@ fields:
   - field name: qg
     mpas template field: theta
     mpas identity field: qg
+ 
+  - field name: equivalent_reflectivity_factor
+    mpas template field: theta
+    mpas identity field: refl10cm

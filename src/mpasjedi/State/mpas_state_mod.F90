@@ -159,7 +159,7 @@ subroutine add_incr(self, increment)
       ! note: nonlinear change of variable
       call da_posdef( self%subFields, mpas_hydrometeor_fields)
       call da_posdef( self%subFields, moistureFields)
-
+      call da_posdef( subFields, ['refl10cm'])
 
       ! Update qv (water vapor mixing ratio) from spechum (specific humidity) [ w = q / (1 - q) ]
       ! note: nonlinear change of variable
