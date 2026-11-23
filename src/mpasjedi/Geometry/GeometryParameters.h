@@ -36,6 +36,15 @@ class GeometryParameters : public oops::Parameters {
   oops::Parameter<bool> update_2mTQ_between_outer_loops{
       "update 2mTQ between outer loops", false, this};
 
+  /// power-transform exponent p for hydrometeor control variables <name>_pt,
+  /// z = (max(q,qmin)**p - 1)/p; only used when <name>_pt fields are requested
+  oops::Parameter<double> hydro_pt_exponent{
+      "hydrometeor power transform exponent", 0.4, this};
+
+  /// lower bound on q [kg/kg] used in the forward transform and Jacobian
+  oops::Parameter<double> hydro_pt_qmin{
+      "hydrometeor power transform qmin", 1.0e-8, this};
+
   /// yaml filename that contains the list of variables to be kept
   /// when "deallocate non-da fields" is true
   oops::Parameter<std::string> kept_fields_file{ "kept fields file", "keptvars.yaml", this};

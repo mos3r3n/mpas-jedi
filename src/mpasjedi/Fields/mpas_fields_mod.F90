@@ -37,6 +37,7 @@ use mpas_constants_mod
 use mpas_geom_mod
 use mpas4da_mod
 use mpas2ufo_vars_mod, only: w_to_q, theta_to_temp
+use mpas_hydro_pt_mod, only: hydro_pt_diagnose
 use mpas_kinds, only : c_real_type
 
 implicit none
@@ -517,6 +518,10 @@ subroutine update_diagnostic_fields(geom, subFields, ngrid)
 
    ! Impose positive-definite limits on fields with "positive definite: true" in geovars.yaml
    call da_posdef( subFields, geom%posdef_fields())
+
+   !(3) diagnose power-transformed hydrometeors (<name>_pt) from the clipped mixing ratios
+   !    note: no-op unless <name>_pt fields are in subFields
+   call hydro_pt_diagnose( subFields, ngrid, geom%hydro_pt_exponent, geom%hydro_pt_qmin )
 
 end subroutine update_diagnostic_fields
 

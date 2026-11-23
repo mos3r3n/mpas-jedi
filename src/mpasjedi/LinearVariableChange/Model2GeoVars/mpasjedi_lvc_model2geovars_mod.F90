@@ -28,6 +28,10 @@ use mpas_constants_mod
 use mpas_fields_mod, only: mpas_fields
 use mpas_geom_mod, only: mpas_geom
 use mpas4da_mod, only: da_template_pool
+use mpas_hydro_pt_mod, only: nHydroPT, hydroBaseNames, is_hydro_base, hydro_pt_name, pt_slope
+
+!MPAS-Model physical constants
+use mpas_constants, only: gravity
 
 !TODO: package the variable changes somewhere
 use mpas2ufo_vars_mod
@@ -66,12 +70,13 @@ subroutine create(self, geom, bg, fg, conf)
   integer :: iVar
 
   character(len=MAXVARLEN), parameter :: &
-    trajFieldNames(4) = &
+    trajFieldNames(4 + nHydroPT) = &
       [ character(len=MAXVARLEN) :: &
         'air_temperature', &
         'water_vapor_mixing_ratio_wrt_moist_air', &
         'air_pressure', &
-        'air_pressure_at_surface' &
+        'air_pressure_at_surface', &
+        hydroBaseNames & ! hydrometeors: linearization state for <name>_pt increments
       ]
   character(len=MAXVARLEN), allocatable :: trajHasNames(:)
 
@@ -152,6 +157,11 @@ subroutine multiply(self, geom, dxm, dxg)
       ! through the geom object. Refer to the mpas_geom type for more information.
       if (dxm%has(geom%identity(geovar))) then
         call dxm%copy_to(geom%identity(geovar), dxg, geovar)
+      else if (is_hydro_base(geom%identity(geovar)) .and. &
+               dxm%has(hydro_pt_name(geom%identity(geovar)))) then
+        ! hydrometeor analyzed in power-transformed space: dq = (dq/dz)|traj * dz
+        call dxg%get(geovar, gdata)
+        call hydro_q_tl(geom%identity(geovar), gdata%r2%array(:,1:nCells))
       else
         !note: this warning is specifically for pressure => air_pressure in GNSSRO
         !write(message,'(2A)') &
@@ -208,22 +218,22 @@ subroutine multiply(self, geom, dxm, dxg)
           end where
 
         case ( var_clw_wp ) !-mass_content_of_cloud_liquid_water_in_atmosphere_layer
-          call q_fields_TL('cloud_liquid_water', mFields_tl, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_tl('cloud_liquid_water', gdata%r2)
 
         case ( var_cli_wp ) !-mass_content_of_cloud_ice_in_atmosphere_layer
-          call q_fields_TL('cloud_liquid_ice', mFields_tl, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_tl('cloud_liquid_ice', gdata%r2)
 
         case ( var_clr_wp ) !-mass_content_of_rain_in_atmosphere_layer
-          call q_fields_TL('rain_water', mFields_tl, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_tl('rain_water', gdata%r2)
 
         case ( var_cls_wp ) !-mass_content_of_snow_in_atmosphere_layer
-          call q_fields_TL('snow_water', mFields_tl, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_tl('snow_water', gdata%r2)
 
         case ( var_clg_wp ) !-mass_content_of_graupel_in_atmosphere_layer
-          call q_fields_TL('graupel', mFields_tl, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_tl('graupel', gdata%r2)
 
         case ( var_clh_wp ) !-mass_content_of_hail_in_atmosphere_layer
-          call q_fields_TL('hail', mFields_tl, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_tl('hail', gdata%r2)
 
       end select
 
@@ -233,6 +243,43 @@ subroutine multiply(self, geom, dxm, dxg)
 
   deallocate(plevels)
 
+contains
+
+  !> TL hydrometeor mixing-ratio increment dq [kg/kg], taken from the mixing-ratio
+  !> increment itself or mapped from its power-transformed counterpart <name>_pt
+  subroutine hydro_q_tl(qName, dq)
+    character(len=*), intent(in)  :: qName
+    real(kind=RKIND), intent(out) :: dq(:,:)   ! (nVertLevels, nCells)
+    real(kind=RKIND), dimension(:,:), pointer :: dqm, dz, qTraj
+    if (dxm%has(qName)) then
+      call dxm%get(qName, dqm)
+      dq = dqm(:,1:nCells)
+    else if (dxm%has(hydro_pt_name(qName))) then
+      call dxm%get(hydro_pt_name(qName), dz)
+      call mpas_pool_get_array(self%trajectory, trim(qName), qTraj)
+      dq = pt_slope(qTraj(:,1:nCells), geom%hydro_pt_exponent, geom%hydro_pt_qmin) * dz(:,1:nCells)
+    else
+      call abor1_ftn('mpasjedi_lvc_model2geovars::multiply: increment has neither '// &
+                     trim(qName)//' nor '//trim(hydro_pt_name(qName)))
+    end if
+  end subroutine hydro_q_tl
+
+  !> TL layer mass content [kg/m2] of a hydrometeor
+  subroutine hydro_wp_tl(qName, qGeo_tl)
+    character(len=*),           intent(in)    :: qName
+    type(field2DReal), pointer, intent(inout) :: qGeo_tl
+    real(kind=RKIND), allocatable :: dq(:,:)
+    if (dxm%has(qName)) then
+      ! unchanged behavior when the mixing ratio itself is analyzed
+      call q_fields_TL(qName, mFields_tl, qGeo_tl, plevels, nCells, nVertLevels)
+    else
+      allocate(dq(nVertLevels, nCells))
+      call hydro_q_tl(qName, dq)
+      qGeo_tl%array(1:nVertLevels,1:nCells) = dq * &
+        ( plevels(1:nVertLevels,1:nCells) - plevels(2:nVertLevels+1,1:nCells) ) / gravity
+      deallocate(dq)
+    end if
+  end subroutine hydro_wp_tl
 
 end subroutine multiply
 
@@ -285,6 +332,10 @@ subroutine multiplyadjoint(self, geom, dxg, dxm)
       ! through the geom object. Refer to the mpas_geom type for more information.
       if (dxm%has(geom%identity(geovar))) then
         call dxm%copy_to_ad(geom%identity(geovar), dxg, geovar)
+      else if (is_hydro_base(geom%identity(geovar)) .and. &
+               dxm%has(hydro_pt_name(geom%identity(geovar)))) then
+        call dxg%get(geovar, gdata)
+        call hydro_q_ad(geom%identity(geovar), gdata%r2%array(:,1:nCells))
       else
         !note: this warning is specifically for pressure => air_pressure in GNSSRO
         !write(message,'(2A)') &
@@ -349,22 +400,22 @@ subroutine multiplyadjoint(self, geom, dxg, dxm)
           deallocate(r2)
 
         case ( var_clw_wp ) !-mass_content_of_cloud_liquid_water_in_atmosphere_layer
-          call q_fields_AD('cloud_liquid_water', mFields_ad, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_ad('cloud_liquid_water', gdata%r2)
 
         case ( var_cli_wp ) !-mass_content_of_cloud_ice_in_atmosphere_layer
-          call q_fields_AD('cloud_liquid_ice', mFields_ad, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_ad('cloud_liquid_ice', gdata%r2)
 
         case ( var_clr_wp ) !-mass_content_of_rain_in_atmosphere_layer
-          call q_fields_AD('rain_water', mFields_ad, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_ad('rain_water', gdata%r2)
 
         case ( var_cls_wp ) !-mass_content_of_snow_in_atmosphere_layer
-          call q_fields_AD('snow_water', mFields_ad, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_ad('snow_water', gdata%r2)
 
         case ( var_clg_wp ) !-mass_content_of_graupel_in_atmosphere_layer
-          call q_fields_AD('graupel', mFields_ad, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_ad('graupel', gdata%r2)
 
         case ( var_clh_wp ) !-mass_content_of_hail_in_atmosphere_layer
-          call q_fields_AD('hail', mFields_ad, gdata%r2, plevels, nCells, nVertLevels)
+          call hydro_wp_ad('hail', gdata%r2)
 
       end select
 
@@ -373,6 +424,38 @@ subroutine multiplyadjoint(self, geom, dxg, dxm)
   end do !iVar
 
   deallocate(plevels)
+
+contains
+
+  !> AD of the power-transformed path of hydro_q_tl: dz_ad += (dq/dz)|traj * dq_ad
+  subroutine hydro_q_ad(qName, dq_ad)
+    character(len=*), intent(in) :: qName
+    real(kind=RKIND), intent(in) :: dq_ad(:,:)   ! (nVertLevels, nCells)
+    real(kind=RKIND), dimension(:,:), pointer :: dz_ad, qTraj
+    call dxm%get(hydro_pt_name(qName), dz_ad)
+    call mpas_pool_get_array(self%trajectory, trim(qName), qTraj)
+    dz_ad(:,1:nCells) = dz_ad(:,1:nCells) + &
+      pt_slope(qTraj(:,1:nCells), geom%hydro_pt_exponent, geom%hydro_pt_qmin) * dq_ad
+  end subroutine hydro_q_ad
+
+  !> AD of hydro_wp_tl
+  subroutine hydro_wp_ad(qName, qGeo_ad)
+    character(len=*),           intent(in) :: qName
+    type(field2DReal), pointer, intent(in) :: qGeo_ad
+    real(kind=RKIND), allocatable :: dq_ad(:,:)
+    if (dxm%has(qName)) then
+      call q_fields_AD(qName, mFields_ad, qGeo_ad, plevels, nCells, nVertLevels)
+    else if (dxm%has(hydro_pt_name(qName))) then
+      allocate(dq_ad(nVertLevels, nCells))
+      dq_ad = qGeo_ad%array(1:nVertLevels,1:nCells) * &
+        ( plevels(1:nVertLevels,1:nCells) - plevels(2:nVertLevels+1,1:nCells) ) / gravity
+      call hydro_q_ad(qName, dq_ad)
+      deallocate(dq_ad)
+    else
+      call abor1_ftn('mpasjedi_lvc_model2geovars::multiplyadjoint: increment has neither '// &
+                     trim(qName)//' nor '//trim(hydro_pt_name(qName)))
+    end if
+  end subroutine hydro_wp_ad
 
 end subroutine multiplyadjoint
 

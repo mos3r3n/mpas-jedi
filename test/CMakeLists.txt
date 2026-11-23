@@ -72,6 +72,7 @@ list( APPEND mpas_testinput
   testinput/3denvar_multi_resolution.yaml
   testinput/3denvar_multi_resolution_regional.yaml
   testinput/3denvar_amsua_allsky.yaml
+  testinput/3denvar_amsua_allsky_pt.yaml
   testinput/3denvar_amsua_bc.yaml
   testinput/3dfgat.yaml
   testinput/3dfgat_pseudo.yaml
@@ -944,6 +945,15 @@ add_mpasjedi_application_test(
 
 add_mpasjedi_application_test(
     NAME 3denvar_amsua_allsky
+    APPLICATION variational
+    DEPENDS parameters_bumploc
+    ${RECALIBRATE})
+
+# hydrometeors analyzed as power-transformed control variables (<name>_pt)
+# TODO: generate testoutput/3denvar_amsua_allsky_pt.ref with RECALIBRATE_CTEST_REFS=ON,
+#       then add it to the testoutput file list above
+add_mpasjedi_application_test(
+    NAME 3denvar_amsua_allsky_pt
     APPLICATION variational
     DEPENDS parameters_bumploc
     ${RECALIBRATE})

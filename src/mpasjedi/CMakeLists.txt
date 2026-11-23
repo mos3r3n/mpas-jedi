@@ -77,6 +77,7 @@ list( APPEND mpasjedi_src_files
     Utilities/mpas2ufo_vars_mod.F90
     Utilities/mpas4da_mod.F90
     Utilities/mpas_constants_mod.F90
+    Utilities/mpas_hydro_pt_mod.F90
     Utilities/mpas_kinds_mod.F90
     )
 

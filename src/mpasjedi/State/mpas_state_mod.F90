@@ -37,6 +37,7 @@ use mpas_fields_mod
 use mpas_saca_interface_mod, only: update_cloud_fields
 use mpas2ufo_vars_mod
 use mpas4da_mod
+use mpas_hydro_pt_mod, only: hydro_pt_add_incr
 
 implicit none
 
@@ -154,6 +155,11 @@ subroutine add_incr(self, increment)
       ! Second, update subFields that are common between self and increment
       kind_op = 'add'
       call da_operator(trim(kind_op), self%subFields, increment%subFields, fld_select = increment%fldnames_ci)
+
+      ! Map power-transformed hydrometeor increments (<name>_pt) back to mixing ratios
+      ! note: nonlinear change of variable; no-op unless the increment contains <name>_pt
+      call hydro_pt_add_incr( self%subFields, increment%subFields, ngrid, &
+                              self%geom%hydro_pt_exponent, self%geom%hydro_pt_qmin )
 
       ! Third, update thermodynamic subFields at surface if requested
       if (self%geom%update_2mTQ_between_outer_loops) then
