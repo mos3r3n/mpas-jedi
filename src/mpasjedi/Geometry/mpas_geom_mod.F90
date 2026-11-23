@@ -76,6 +76,8 @@ type :: mpas_geom
    logical :: update_2mTQ_between_outer_loops
    character(len=StrKIND) :: bump_vunit
    real(kind=RKIND) :: regional_nn_fill_distance_in_km
+   real(kind=RKIND) :: hydro_pt_exponent = 0.4_RKIND   ! power transform exponent p
+   real(kind=RKIND) :: hydro_pt_qmin = 1.0e-8_RKIND    ! lower bound on q [kg/kg]
    real(kind=RKIND), dimension(:),   allocatable :: latCell, lonCell
    real(kind=RKIND), dimension(:),   allocatable :: areaCell
    real(kind=RKIND), dimension(:),   allocatable :: latEdge, lonEdge
@@ -218,6 +220,14 @@ subroutine geo_setup(self, f_conf, f_comm)
 
    ! distance for the nearest-neighbor filling in OOPS unstructured interpolator
    call f_conf%get_or_die("regional nn fill distance in km", self%regional_nn_fill_distance_in_km)
+
+   ! power transform settings for hydrometeor control variables (<name>_pt)
+   call f_conf%get_or_die("hydrometeor power transform exponent", self%hydro_pt_exponent)
+   call f_conf%get_or_die("hydrometeor power transform qmin", self%hydro_pt_qmin)
+   if (self%hydro_pt_exponent <= 0.0_RKIND .or. self%hydro_pt_exponent > 1.0_RKIND) &
+      call abor1_ftn("geo_setup: hydrometeor power transform exponent must be in (0,1]")
+   if (self%hydro_pt_qmin <= 0.0_RKIND) &
+      call abor1_ftn("geo_setup: hydrometeor power transform qmin must be > 0")
 
    if (allocated(geom_count)) then
       nprev = size(geom_count)
@@ -763,6 +773,8 @@ subroutine geo_clone(self, other)
    self % bdyMaskVertex     = other % bdyMaskVertex
    self % update_2mTQ_between_outer_loops = other % update_2mTQ_between_outer_loops
    self % regional_nn_fill_distance_in_km = other % regional_nn_fill_distance_in_km
+   self % hydro_pt_exponent = other % hydro_pt_exponent
+   self % hydro_pt_qmin     = other % hydro_pt_qmin
 
    self%afunctionspace = atlas_functionspace(other%afunctionspace%c_ptr())
 

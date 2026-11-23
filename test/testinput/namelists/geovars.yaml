@@ -211,6 +211,35 @@ fields:
     mpas io name: qh
     positive definite: true
 
+# Power-transformed hydrometeor mixing ratios, z = (max(q,qmin)**p - 1)/p.
+# Diagnosed from <name> on read; analyzed directly; mapped back to <name> in add_incr.
+# No io name: these are not MPAS Registry fields. Not positive definite (z < 0 near q = 0).
+# See src/mpasjedi/Utilities/mpas_hydro_pt_mod.F90.
+  - field name: cloud_liquid_water_pt
+    mpas template field: theta
+  - field name: cloud_liquid_ice_pt
+    mpas template field: theta
+  - field name: rain_water_pt
+    mpas template field: theta
+  - field name: snow_water_pt
+    mpas template field: theta
+  - field name: graupel_pt
+    mpas template field: theta
+  - field name: hail_pt
+    mpas template field: theta
+  - field name: mixing_ratio_of_cloud_liquid_water_pt
+    mpas template field: theta
+  - field name: mixing_ratio_of_cloud_ice_pt
+    mpas template field: theta
+  - field name: mixing_ratio_of_rain_pt
+    mpas template field: theta
+  - field name: mixing_ratio_of_snow_pt
+    mpas template field: theta
+  - field name: mixing_ratio_of_graupel_pt
+    mpas template field: theta
+  - field name: mixing_ratio_of_hail_pt
+    mpas template field: theta
+
   - field name: cloud_droplet_number_concentration
     mpas template field: theta
     mpas identity field: cloud_droplet_number_concentration
